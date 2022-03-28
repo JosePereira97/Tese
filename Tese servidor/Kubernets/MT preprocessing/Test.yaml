@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-python
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: hello-python
+  template:
+    metadata:
+      labels:
+        app: hello-python
+    spec:
+      containers:
+      - name: hello-python
+        image: hello-python:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 5000
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-python-service
+spec: 
+  ports:
+  - port: 8000
+    targetPort: 5000
+    protocol: TCP
+  selector:
+    app: hello-python
+  type: LoadBalancer
