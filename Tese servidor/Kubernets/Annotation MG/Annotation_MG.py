@@ -1,15 +1,12 @@
-from flask import Flask, request, jsonify
 
+from flask import Flask, request, jsonify, json, make_response
 
 app = Flask(__name__)
 
-@app.route("/")
+@app.route("/", methods=['POST'])
 def hello_world():
-     args = request.params
-     print(args)
-     no1 = args['key1']
-     no2 = args['key2']
-     return jsonify(dict(data=[no1,no2]))
+     args = json.loads(request.data)
+     return "Meu nome e " + args['name'] + " e tenho " + args['Idade'] + " anos."
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0')

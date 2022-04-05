@@ -1,14 +1,17 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Request,json, send_file
+import numpy
+from PIL import Image as im
 
 
 app = Flask(__name__)
 
-@app.route("/")
+@app.route("/", methods = ['POST'])
 def hello_world():
-     args = request.args
-     print(args)
-     no1 = args['key1']
-     return jsonify(dict(data=[no1]))
+     data = request.files['image']
+     print('------------')
+     print(data.read())
+     
+     
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0')

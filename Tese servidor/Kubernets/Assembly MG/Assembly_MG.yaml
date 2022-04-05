@@ -1,35 +1,35 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: Assembly-MG
+  name: assembly-mg
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: Assembly-MG
+      app: assembly-mg
   template:
     metadata:
       labels:
-        app: Assembly-MG
+        app: assembly-mg
     spec:
       containers:
-      - name: Assembly-MG
-        image: Assembly-MG:latest
+      - name: assembly-mg
+        image: assembly-mg:latest
         imagePullPolicy: Never
         ports:
-        - containerPort: 5001
+        - containerPort: 5100
 
 ---
 
 apiVersion: v1
 kind: Service
 metadata:
-  name: Assembly-MG-service
+  name: assembly-mg-service
 spec: 
   ports:
-  - port: 8001
-    targetPort: 5001
+  - port: 8100
+    targetPort: 5100
     protocol: TCP
   selector:
-    app: Assembly-MG
+    app: assembly-mg
   type: LoadBalancer

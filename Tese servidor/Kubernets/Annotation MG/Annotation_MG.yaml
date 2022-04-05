@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: Annotation-MG
+  name: annotation-mg
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: Annotation-MG
+      app: annotation-mg
   template:
     metadata:
       labels:
-        app: Annotation-MG
+        app: annotation-mg
     spec:
       containers:
-      - name: Annotation-MG
-        image: Annotation-MG:latest
+      - name: annotation-mg
+        image: annotation-mg:latest
         imagePullPolicy: Never
         ports:
         - containerPort: 5000
@@ -24,12 +24,12 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: Annotation-MG-service
+  name: annotation-mg-service
 spec: 
   ports:
   - port: 8000
     targetPort: 5000
     protocol: TCP
   selector:
-    app: Annotation-MG
+    app: annotation-mg
   type: LoadBalancer

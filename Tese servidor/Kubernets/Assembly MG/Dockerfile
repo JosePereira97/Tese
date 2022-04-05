@@ -6,6 +6,6 @@ ADD . /Assembly_MG/
 #install dependecies
 RUN pip install flask
 
-EXPOSE 5001
+EXPOSE 5100
 
 CMD ["python3", "Assembly_MG.py"]
