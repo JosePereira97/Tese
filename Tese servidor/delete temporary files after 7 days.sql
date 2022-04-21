@@ -1,0 +1,6 @@
+CREATE DEFINER = CURRENT_USER TRIGGER `mydb`.`Temporary Files_AFTER_UPDATE` AFTER UPDATE ON `Temporary Files` FOR EACH ROW
+BEGIN
+
+DELETE FROM `Temporary Files` WHERE `Created` < GETDATE() - 7;
+
+END
