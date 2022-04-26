@@ -1,24 +1,21 @@
 
-from isort import file
-from io import BytesIO
-import numpy
 import requests
-from flask import Flask,request, Response, jsonify, json, send_file
+from flask import Flask,request, Response, jsonify, json, send_file, render_template
 from PIL import Image as im
-from base64 import b64encode
+from flask_mysqldb import MySQL
 app = Flask(__name__)
 
+app.config['MYSQL_HOST'] = '...' #adicionar link
+app.config['MYSQL_USER'] = 'root' #user_database
+app.config['MYSQL_PASSWORD'] = 'Lolada12!' #password_database
+app.config['MYSQL_DB'] = 'MyDB' #respective table
 
+mysql = MySQL(app)
 
 @app.route("/Annotation_MG")
 def Annotation():
      data = {'name': 'Jose', 'Idade': '15'}
      response = requests.post('http://192.168.1.99:5000/', verify=False,data=json.dumps(data), headers={'Content-Type':'application/json'})
-     print(response.status_code)
-     print(response.content)
-     print(response.text)
-     print(response.url)
-     print(response.headers)
      return(response.text)
      
 
@@ -29,11 +26,15 @@ def Assembly():
      if not pic:
           return 'no pic uploaded',400
      data = {'image':pic}
-     print(data)
      response = requests.post('http://192.168.1.99:5000/', verify=False, files=data)
-     print('---------------------')
      return('Sucesss')
      
+@app.route('/get_Results', methods = ['GET', 'POST'])
+def my_results():
+     if request.method == 'POST':
+          pass #delete or change file name
+     elif request.method == 'GET':
+          pass #get the list of all the files with the respective keys passed in the arguments
 
      
 if __name__ == '__main__':
