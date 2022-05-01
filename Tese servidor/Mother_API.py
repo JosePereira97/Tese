@@ -4,12 +4,13 @@ from flask import Flask,request, Response, jsonify, json, send_file, render_temp
 from PIL import Image as im
 from flask_mysqldb import MySQL
 from datetime import date
+import werkzeug
 app = Flask(__name__)
 
 app.config['MYSQL_HOST'] = 'localhost' #adicionar link
 app.config['MYSQL_USER'] = 'root' #user_database
-app.config['MYSQL_PASSWORD'] = 'password' #password_database
-app.config['MYSQL_DB'] = 'MyDB' #respective table
+app.config['MYSQL_PASSWORD'] =  'Lolada12!' #password_database
+app.config['MYSQL_DB'] = 'my_files_schema' #respective table
 
 mysql = MySQL(app)
 
@@ -22,30 +23,34 @@ def Annotation():
 
 @app.route("/Assembly_MG", methods=['POST'])
 def Assembly():
-     print(request.files)
      pic = request.files['pic']
+     print(pic)
      if not pic:
           return 'no pic uploaded',400
-     data = {'image':pic}
-     response = requests.post('http://192.168.1.99:5000/', verify=False, files=data)
-     return('Sucesss')
+     files = {'image':(pic.filename, pic.stream, pic.content_type, pic.headers)}
+     response = requests.post('http://192.168.1.99:5000/', files=files)
+     print(response.text)
+     return render_template('index.html')
      
 @app.route('/get_Results', methods = ['GET', 'POST'])
 def my_results():
      cur = mysql.connection.cursor()
+     print('entrou')
      if request.method == 'POST':
-          file = request.files
-          for i in file:
-               User_id = 'Teste'
-               Analyses_name = i['analyses_name']
-               Type_AnalysisFile = i['Type']
-               mimetype = i['blob_data'].mimetype()
-               name = i['blob_data'].read()
-               data = file['blob_data']
-               created = date.today()
-               sequence = (User_id, Analyses_name, Type_AnalysisFile, mimetype, name, data, created)
-               formula = "INSERT INTO Principle_Files (User_id, Analyses_name, Type_AnalysisFile, mimetype, File_name, Data, Created) VALUES (%s,%s,%s,%s,%s,%s,%s)"
-               cur.execute(formula, sequence)
+          file = request.files['image']
+          print(file)
+          User_id = 'Teste'
+          Analyses_name = request.form['analyses_name']
+          Type_AnalysisFile = request.form['Type']
+          mimetype = file.content_type
+          name = file.filename
+          data = file.read()
+          created = date.today()
+          sequence = (User_id, Analyses_name, Type_AnalysisFile, mimetype, name, data, created)
+          formula = "INSERT INTO Principle_Files (User_id, Analyses_name, Type_AnalysisFile, mimetype, File_name, Data, Created) VALUES (%s,%s,%s,%s,%s,%s,%s)"
+          print('its fucked up')
+          cur.execute(formula, sequence)
+          print('sucesso')
           return('Saved with sucess')
 
           ##!TODO amanha, testar funcinamento de upload e de save das imagens e dar debug, de modo a que na sexta se va realizar a funçao GET disposta em baixo.
