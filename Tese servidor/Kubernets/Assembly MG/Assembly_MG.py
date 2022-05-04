@@ -17,7 +17,7 @@ def hello_world():
      print(data)
      data = {'image':(data.filename, data.stream, data.content_type, data.headers)}
      Type = 'Assembly_MG'
-     analyses_name = 'Nome' #nome dado pelos utilizadoresa analise que vao realizar
+     analyses_name = 'Nome_teste' #nome dado pelos utilizadoresa analise que vao realizar
      Characteristics = {'Type': Type, 'analyses_name':analyses_name}
      #@response.call_on_close #responsavel por ser realizada depois de fechar o request da API de modo a nao deixar on hold ou fazer fila de espera, pois deve haver processos que demorem muito tempo.
      #def real_function():

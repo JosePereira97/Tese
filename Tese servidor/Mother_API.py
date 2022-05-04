@@ -3,8 +3,10 @@ import requests
 from flask import Flask,request, Response, jsonify, json, send_file, render_template
 from PIL import Image as im
 from flask_mysqldb import MySQL
-from datetime import date
-import werkzeug
+from datetime import datetime
+from werkzeug.utils import secure_filename
+import os
+
 app = Flask(__name__)
 
 app.config['MYSQL_HOST'] = 'localhost' #adicionar link
@@ -13,6 +15,10 @@ app.config['MYSQL_PASSWORD'] =  'Lolada12!' #password_database
 app.config['MYSQL_DB'] = 'my_files_schema' #respective table
 
 mysql = MySQL(app)
+UPLOAD_FOLDER = 'C:\\Users\josep\OneDrive\Documentos\GitHub\Tese\Tese servidor\Files_DB'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+ALLOWED_EXTENSIONS = set(['png', 'jpg', 'jpeg', 'gif'])
+
 
 @app.route("/Annotation_MG")
 def Annotation():
@@ -34,22 +40,26 @@ def Assembly():
      
 @app.route('/get_Results', methods = ['GET', 'POST'])
 def my_results():
-     cur = mysql.connection.cursor()
+     con = mysql.connection
+     cur = con.cursor()
      print('entrou')
      if request.method == 'POST':
           file = request.files['image']
+          filename = secure_filename(file.filename)
+          file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
           print(file)
-          User_id = 'Teste'
+          User_id = 'Teste_Teste'
           Analyses_name = request.form['analyses_name']
           Type_AnalysisFile = request.form['Type']
           mimetype = file.content_type
           name = file.filename
           data = file.read()
-          created = date.today()
-          sequence = (User_id, Analyses_name, Type_AnalysisFile, mimetype, name, data, created)
-          formula = "INSERT INTO Principle_Files (User_id, Analyses_name, Type_AnalysisFile, mimetype, File_name, Data, Created) VALUES (%s,%s,%s,%s,%s,%s,%s)"
+          created = datetime.now()
+          sequence = (User_id, Analyses_name, Type_AnalysisFile, data, name, created, mimetype)
+          formula = "INSERT INTO principle_Files VALUES (%s,%s,%s,%s,%s,%s,%s)"
           print('its fucked up')
           cur.execute(formula, sequence)
+          con.commit()
           print('sucesso')
           return('Saved with sucess')
 
@@ -59,7 +69,7 @@ def my_results():
 
      elif request.method == 'GET':
           File_name = request.data['File_name']
-          cur.execute("SELECT * FROM Principle_Files WHERE Analyses_Name = %s", (File_name,))
+          cur.execute("SELECT * FROM principle_Files WHERE Analyses_Name = %s", (File_name,))
           list_files = cur.fetchone()
           print(list_files)
 
