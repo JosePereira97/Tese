@@ -1,0 +1,68 @@
+.App {
+  background-color: #353434;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.header {
+  font-size: calc(10px + 2vmin);
+  color: white;
+  width: 50%;
+  text-align: center;
+}
+
+.main {
+  margin-top: 32px;
+  width: 95%;
+  max-width: 1000px;
+  margin-left: 1rem;
+  margin-right: 1rem;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+}
+
+.MuiAccordionDetails-root {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 16px 16px;
+}
+
+.flex-grow-1{
+  flex-grow: 1;
+}
+
+.w-100{
+  width: 100%;
+}
+
+.m-r-1-rem{
+  margin-right: 1rem;
+}
+
+.MuiCard-root{
+  margin-bottom: 20px;
+  margin-right: 10px;
+}
+
+.container {
+  margin: 0.5rem 0
+}
+
+.left {
+  width: 30%;
+  float: left;
+}
+
+.right {
+  margin-left: 30%;
+}
+
+.rowC{
+  display:flex;
+  flex-direction:row;
+}
