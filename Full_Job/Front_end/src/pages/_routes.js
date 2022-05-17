@@ -11,7 +11,7 @@ import Experiments from "./experiments";
 import UniprotColumns from "./uniprotColumns";
 import UniprotDatabases from "./uniprotDatabases"
 import KeggMaps from "./keggmaps";
-import {LoadResults} from "./results";
+//import {LoadResults} from "./results";
 import {FastQCFiles} from "./fastQCReports";
 import AssemblyQC from "./assemblyQC";
 import {AnnotationResults} from './annotation';
@@ -20,6 +20,7 @@ import {KeggmapsResults} from './keggmapsResults'
 import EntryReports from "./entryReport";
 import GeneralReports from "./generalReports";
 import ProteinReports from "./proteinReports";
+import { LoadResults } from "./results";
 
 const Routes = ({ configData, onConfigChange, onConfigOverwrite, experiments, setExperiments,
                   nExperimentsRows, setExperimentsRows, hasMt, toggleHasMt, hasMp, toggleHasMp,
