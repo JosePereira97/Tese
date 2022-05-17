@@ -1,10 +1,12 @@
 from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+from flask_cors import CORS
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:password@localhost/Result_Files'
 db = SQLAlchemy(app)
+CORS(app)
 
 class Result_Files(db.Model):
     id = db.Column(db.Integer, primary_key = True)
@@ -34,7 +36,7 @@ def format_object(object):
         "User_id": object.User_id,
         "Analyses_name": object.Analyses_name,
         "Type_Analyses_File": object.Type_Analyses_File,
-        "Data":object.Data,
+        "Data":object.Data, #data nao fica pois, pois e bites. bites nao se pode tranformar em JSON.
         "File_Name":object.File_Name,
         "Created_on":object.Created_on,
         "mimetype":object.mimetype
@@ -49,18 +51,12 @@ def hello():
 #Fuction to store the principle files in our database
 @app.route('/Save_Primary_Files', methods = ['POST'])
 def Save_Primary_Files():
-    User_id = 'Name_do_user'
-    Analyses_name = request.json['Analyses_name']
-    print(Analyses_name)
-    Type_Analyses_File = request.json['Type_Analyses_File']
-    print(Type_Analyses_File)
-    Data = b'122345676765656565'
-    File_Name = 'Cenas'
-    mimetype = 'Nao_sei'
-    #Data = request.file['file'].read() #comentado pois POSTMAN nao consegue enviar ficheiros e files doutra maneira
-    #print(Data)
-    #File_Name = request.file['file'].filename
-    #mimetype = request.file['file'].mimetype
+    User_id = 'Name_do_user' #none do user Logged_in
+    Analyses_name = request.form['Analyses_name']
+    Type_Analyses_File = request.form['Type_Analyses_File']
+    Data = request.files['file'].read()
+    File_Name = request.files['file'].filename
+    mimetype = request.files['file'].mimetype
     Primary_Files = Result_Files(User_id, Analyses_name, Type_Analyses_File, Data, File_Name, mimetype)
     db.session.add(Primary_Files)
     db.session.commit()
@@ -72,7 +68,8 @@ def retrive_Analyses_name():
     get_names = Result_Files.query.order_by(Result_Files.Created_on.asc()).all()
     names = []
     for event in get_names:
-        names.append(format_object(event)['Analyses_name'])
+        if format_object(event)['Analyses_name'] not in names:
+            names.append(format_object(event)['Analyses_name'])
     return {'names': names}
 
 #get the respective results from the respective file name and user
@@ -83,7 +80,7 @@ def get_resuls(name):
     for result in get_results:
         respective_results.append(format_object(result)['File_Name'])
     return {"results": respective_results}#!TODO feedback para saber o que fazer com o retrive dos resultados. Depois layout no front_end. Eventualmente fazer diferentes tipos de gets
-#Pode haver mais gets da tabela principal. se necessario adicionar codigo para que sempre que a funçao de add files correr podemos ver se existem ficheiros com mais de 30 dias e elemina-los da satabase.
+#Pode haver mais gets da tabela principal. se necessario adicionar codigo para que sempre que a funçao de add files correr podemos ver se existem ficheiros com mais de 30 dias e elemina-los da satabase.A nivel da leitura dos resultados manter. A sua visualizaçao sem alteraçao.
 
 
 
