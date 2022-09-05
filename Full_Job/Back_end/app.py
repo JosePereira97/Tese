@@ -1,91 +1,75 @@
-from flask import Flask, request
+from urllib import response
+from flask import Flask, request, send_file
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from flask_cors import CORS
+import requests
+import json
+from io import BytesIO
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:password@localhost/Result_Files'
-db = SQLAlchemy(app)
 CORS(app)
 
-class Result_Files(db.Model):
-    id = db.Column(db.Integer, primary_key = True)
-    User_id = db.Column(db.String(45), nullable = False)
-    Analyses_name = db.Column(db.String(45), nullable = False)
-    Type_Analyses_File = db.Column(db.String(45), nullable = False)
-    Data = db.Column(db.LargeBinary, nullable = False)
-    File_Name = db.Column(db.String(45), nullable = False)
-    Created_on = db.Column(db.DateTime, nullable = False, default =datetime.now)
-    mimetype = db.Column(db.String(45), nullable = False)
+@app.route('/Submit_input_file', methods=['POST'])
+def input():
+    file = {}
+    pic = request.files['el_file']
+    file['el_file'] = (pic.filename, pic.stream, pic.content_type, pic.headers)
+    resposta = requests.post('http://localhost:5000/Save_Input_Files', data=request.form.to_dict(), files=file)
+    if resposta.content == 'The paste is full':
+        return('No space') ##riderect the page to my inputs to show the space limit, and to let them delete input files.
+    return('done')
+    #Ter atençao pois as respostas podes ser diferentes fazer alteraçoes
 
-    def __repr__(self):
-        return f'Result_Files: {self.File_Name}'
+@app.route('/Get_my_inputs', methods=['POST'])
+def all_inputs():
+    resposta = requests.get('http://localhost:5000/all_inputs', data=request.form)
+    print(resposta.content)
+    if resposta.content == 'No input files':
+        return []
+    else:
+        return resposta.content
 
-    def __init__(self, User_id, Analyses_name, Type_Analyses_File, Data, File_Name, mimetype):
-        self.User_id = User_id
-        self.Analyses_name = Analyses_name
-        self.Type_Analyses_File = Type_Analyses_File
-        self.Data = Data
-        self.File_Name = File_Name
-        self.mimetype = mimetype
+@app.route('/Get_my_inputs/Delete_Files')
+def delete_inputs():
+    resposta = requests.delete('http://localhost:5000/delete_inputs', data = request.data)
+    return resposta.content
 
-#Function that tranform the data into a JSON file
-def format_object(object):
-    return {
-        "id": object.id,
-        "User_id": object.User_id,
-        "Analyses_name": object.Analyses_name,
-        "Type_Analyses_File": object.Type_Analyses_File,
-        "Data":object.Data, #data nao fica pois, pois e bites. bites nao se pode tranformar em JSON.
-        "File_Name":object.File_Name,
-        "Created_on":object.Created_on,
-        "mimetype":object.mimetype
-    }
+@app.route('/Submit_for_analyses')
+def start_analyses():
+    config = request.data['Config_file']
+    Data_files = request.data['Files']
+    files_info = {}
+    count = 0
+    for file in Data_files:
+        get_file = requests.get(f'http://localhost:5000/get/{file.id}') #Fazer na BD get file By_ID
+        #if file.type is #fazer com tipos de files que podem ser scafolds etc. Para dar o nome da sample.
+            #dar o nome ao ficheiro e adicionar ao files_info
+        files_info[count] = get_file.content
+        count += 1
+    get_response = request.post() #Meter URL do servidor para começar analise.
+    return(get_response.content)
 
+@app.route('/Get_my_analyses')
+def my_analyses():
+    #fuction to retrive all analyses names from the user.
+    pass
 
-@app.route('/')
-def hello():
-    return 'Hey!'
+@app.route('/Get_my_analyses/Get_Diferent_Outputs')
+def my_outputs():
+    #fuction to retrieve steps made in the analyse
+    pass
 
-#Tabela dos Ficheiros Principais
-#Fuction to store the principle files in our database
-@app.route('/Save_Primary_Files', methods = ['POST'])
-def Save_Primary_Files():
-    User_id = 'Name_do_user' #none do user Logged_in
-    Analyses_name = request.form['Analyses_name']
-    Type_Analyses_File = request.form['Type_Analyses_File']
-    Data = request.files['file'].read()
-    File_Name = request.files['file'].filename
-    mimetype = request.files['file'].mimetype
-    Primary_Files = Result_Files(User_id, Analyses_name, Type_Analyses_File, Data, File_Name, mimetype)
-    db.session.add(Primary_Files)
-    db.session.commit()
-    return "Primary_File saved"
-
-#Fuction to retrieve all Analyses_name (estas nomes serao usados para o utilizador ver todos as suas analises realizadas)
-@app.route('/get_all_user_files', methods = ['GET'])
-def retrive_Analyses_name():
-    get_names = Result_Files.query.order_by(Result_Files.Created_on.asc()).all()
-    names = []
-    for event in get_names:
-        if format_object(event)['Analyses_name'] not in names:
-            names.append(format_object(event)['Analyses_name'])
-    return {'names': names}
-
-#get the respective results from the respective file name and user
-@app.route('/getfile/<name>')
-def get_resuls(name):
-    get_results = Result_Files.query.filter_by(Analyses_name = name).filter_by(User_id = 'Name_do_user').all()
-    respective_results = []
-    for result in get_results:
-        respective_results.append(format_object(result)['File_Name'])
-    return {"results": respective_results}#!TODO feedback para saber o que fazer com o retrive dos resultados. Depois layout no front_end. Eventualmente fazer diferentes tipos de gets
-#Pode haver mais gets da tabela principal. se necessario adicionar codigo para que sempre que a funçao de add files correr podemos ver se existem ficheiros com mais de 30 dias e elemina-los da satabase.A nivel da leitura dos resultados manter. A sua visualizaçao sem alteraçao.
+@app.route('/Get_my_analyses/Get_Diferent_Outputs/results')
+def my_results():
+    #fuction that get the files and show them in front_end
+    pass
 
 
 
 
 
-if __name__ == '__name__':
-    app.run()
+
+if __name__ == '__main__':
+    app.run(port=5002)
 
