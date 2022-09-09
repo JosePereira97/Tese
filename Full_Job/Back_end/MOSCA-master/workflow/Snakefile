@@ -1,0 +1,519 @@
+from curses import qiflush
+import pathlib
+from numpy import False_
+import pandas as pd
+import shutil
+import sys
+import os
+from mosca_tools import parse_blast, multi_sheet_excel, perform_alignment, generate_expression_matrix, timed_message, \
+    normalize_mg_by_size, make_entry_report, make_protein_report
+
+
+scripts_dir = sys.path[0]
+exps = pd.DataFrame(config["experiments"])
+
+
+def set_name(files, data_type):
+    filename = files.split('/')[-1]
+    if data_type == 'protein':
+        return '_'.join(filename.split('_')[:-1])
+    if ',' in files:
+        return filename.split(',')[0].split('_R')[0]
+    return filename.split('.fa')[0]
+
+for i in range(len(exps)):
+    if pd.isnull(exps.iloc[i]['Name']) or exps.iloc[i]['Name'] == '':
+        exps.iloc[i, exps.columns.get_loc('Name')] = set_name(
+            exps.iloc[i]['Files'], exps.iloc[i]['Data type'])
+    if not config['do_assembly']:
+        exps.iloc[i]['Sample'] = exps.iloc[i]['Name']
+
+pathlib.Path(f"{config['output']}").mkdir(parents=True, exist_ok=True)
+exps.to_csv(f"{config['output']}/exps.tsv", sep = '\t', index = False)
+
+mg_exps = exps[exps["Data type"] == 'dna']
+mt_exps = exps[exps["Data type"] == 'mrna']
+not_mp_exps = exps[exps["Data type"] != 'protein']
+
+def all_input(wildcards):
+    if config['do_assembly']:
+        return (
+            expand("{output}/MOSCA_Protein_Report.xlsx", output=config["output"]) +
+            expand("{output}/MOSCA_Entry_Report.xlsx", output=config["output"]) +
+            expand("{output}/technical_report.tsv", output=config["output"]) +
+            expand("{output}/MOSCA_General_Report.xlsx", output=config["output"]) +
+            expand("{output}/MOSCA_results.zip", output=config["output"]) +
+            expand("{output}/Binning/{sample}/checkm.tsv", output=config["output"], sample=set(exps['Sample']))
+        )
+    else:
+        return f"{config['output']}/MOSCA_Entry_Counts_Report.xlsx"
+
+def preprocess_input(wildcards):
+    # get first value (in case multiple) and split on commas
+    teste = exps.loc[exps['Name'] == wildcards.name, 'Files'].iloc[0].split(',')
+    test2 = [] #fiz alteraçao para lhe inserir a diretoria do input.
+    for i in teste:
+        test2.append("input/" + i)
+        if os.path.exists("input/" + i) == False:
+            #se os ficheiros de input do preprocess n existirem em input, ela nunca vai correr. (Importante na API mae saber quais as rules a correr para n causar problemas no servidor)
+            return []
+    return test2
+
+def join_reads_input(wildcards):
+    df = mg_exps[mg_exps['Sample'] == wildcards.sample].reset_index()
+    if len(df) == 0:
+        df = mt_exps[mt_exps['Sample'] == wildcards.sample].reset_index()
+    reads = [f'input/quality_trimmed_{df.iloc[i]["Name"]}{fr}.fq'
+            for i in range(len(df))
+            for fr in (['_forward_paired', '_reverse_paired'] if ',' in df.iloc[i]["Files"] else [''])]
+    for m in reads:
+        if os.path.exists(m) == False:
+            reads = [f'{config["output"]}/Preprocess/Trimmomatic/quality_trimmed_{df.iloc[i]["Name"]}{fr}.fq'
+            for i in range(len(df))
+            for fr in (['_forward_paired', '_reverse_paired'] if ',' in df.iloc[i]["Files"] else [''])]
+    return reads
+
+def fastq2fasta_input(wildcards):
+    fastq = expand('input/quality_trimmed_{name}{fr}.fq',fr=(['_forward_paired', '_reverse_paired'] if exps["Files"].str.contains(',').tolist() else ''),
+        name = wildcards.sample)
+    for i in fastq:
+        if os.path.exists(i) == False:
+            fastq = expand("{output}/Preprocess/Trimmomatic/quality_trimmed_{name}{fr}.fq", output=config["output"],
+        fr=(['_forward_paired', '_reverse_paired'] if exps["Files"].str.contains(',').tolist() else ''),
+        name = wildcards.sample)
+    return fastq
+
+def annotation_input(wildcards):
+    if config['do_assembly']:
+        annotation = expand("input/{sample}_scaffolds.fasta", sample = set(exps['Sample']))
+        for i in annotation:
+            if os.path.exists(i) == False:
+                return expand(
+                    "{output}/Assembly/{sample}/scaffolds.fasta", output = config["output"],
+                    sample = set(exps['Sample']))
+        else:
+            return annotation
+    annotation = expand('input/piled_piled_{name}.fasta', name=wildcards.sample)
+    for m in annotation:
+        if os.path.exists(m) == False:
+            return expand(
+                "{output}/Preprocess/piled_{name}.fasta", output = config["output"], name = wildcards.sample)
+    return annotation
+
+def upimapi_input(wildcards): #n ser utilizado
+    if config['do_assembly']:
+        return expand(
+            "{output}/Annotation/{sample}/aligned.blast", output=config["output"], sample=set(exps['Sample']))
+    return expand(
+        "{output}/Annotation/{name}/aligned.blast", output=config["output"], name=set(exps['Name']))
+    
+def input_assembly(wildcards):
+    assembly =  expand("input/{sample}{fr}.fastq", sample = set(exps['Sample']), fr = (['_forward', '_reverse'] if exps["Files"].str.contains(',').tolist() else ''))
+    for i in assembly:
+        if os.path.exists(i) == False:
+            return expand("{output}/Preprocess/{sample}{fr}.fastq", output = config["output"], sample = set(exps['Sample']),
+                fr = (['_forward', '_reverse'] if exps["Files"].str.contains(',').tolist() else ''))
+    return assembly
+
+def input_binning_reads(wildcards):
+    reads = expand("input/{sample}{fr}.fastq", sample = set(exps['Sample']), fr = (['_forward', '_reverse'] if exps["Files"].str.contains(',').tolist() else ''))
+    for i in reads:
+        if os.path.exists(i) == False:
+            reads = expand("{output}/Preprocess/{sample}{fr}.fastq", output = config["output"], sample = set(exps['Sample']), fr = (['_forward', '_reverse'] if exps["Files"].str.contains(',').tolist() else ''))
+    return reads
+
+def input_binning_contigs(wildcards):
+    contigs = expand("input/{sample}_scaffolds.fasta", sample = set(exps['Sample']))
+    for i in contigs:
+        if os.path.exists(i) == False:
+            contigs = expand("{output}/Assembly/{sample}/scaffolds.fasta", output = config["output"], sample = set(exps['Sample']))
+            return contigs
+    return contigs
+
+def input_recognizer(wildcards):
+    recog = expand("input/{sample}_fgs.faa", sample = set(exps["Sample"]))
+    for i in recog:
+        if os.path.exists(i) == False:
+            recog = expand("{output}/Annotation/{sample}/fgs.faa", output = config["output"], sample = set(exps["Sample"]))
+            return recog
+    return recog
+
+def input_quantification_analyses_quality(wildcards):
+    quality = expand("input/quality_trimmed_{name}{fr}.fq",name = not_mp_exps["Name"], fr = (['_forward_paired', '_reverse_paired'] if exps["Files"].str.contains(',').tolist() else ''))
+    for i in quality:
+        if os.path.exists(i) == False:
+            quality = expand("{output}/Preprocess/Trimmomatic/quality_trimmed_{name}{fr}.fq", output = config["output"],
+            name = not_mp_exps["Name"],
+            fr = (['_forward_paired', '_reverse_paired'] if exps["Files"].str.contains(',').tolist() else ''))
+            return quality
+    return quality
+
+def input_quantification_analyses_contigs(wildcards):
+    contigs = expand("input/{sample}_contigs.fasta", sample = set(exps["Sample"]))
+    for i in contigs:
+        if os.path.exists(i) == False:
+            contigs = expand("{output}/Assembly/{sample}/contigs.fasta", output = config["output"], sample = set(exps["Sample"]))
+            return contigs
+    return contigs
+
+def input_quantification_analyses_fgs(wildcards):
+    fgs = expand("input/{sample}_fgs.ffn", sample = set(exps["Sample"]))
+    for i in fgs:
+        if os.path.exists(i)==False:
+            fgs = expand("{output}/Annotation/{sample}/fgs.ffn", output = config["output"], sample = set(exps["Sample"]))
+            return fgs
+    return fgs
+
+def input_metaphlan(wildcards):
+    meta = expand('input/quality_trimmed_{name}{fr}.fq', name = mg_exps["Name"], fr = (['_forward_paired', '_reverse_paired'] if exps["Files"].str.contains(',').tolist() else ''))
+    for i in meta:
+        if os.path.exists(i)==False:
+            meta = expand("{output}/Preprocess/Trimmomatic/quality_trimmed_{name}{fr}.fq", output = config["output"], name = mg_exps["Name"], fr = (['_forward_paired', '_reverse_paired'] if exps["Files"].str.contains(',').tolist() else ''))
+            return meta
+    return meta
+
+def input_protein_reporter_Upimapi(wildcards):
+    Upimapi = expand("input/{sample}_UPIMAPI_results.tsv", sample = set(exps['Sample']))
+    for m in Upimapi:
+        if os.path.exists(m) == False:
+            Upimapi = expand("{output}/Annotation/{sample}/UPIMAPI_results.tsv", output = config["output"], sample = set(exps['Sample']))
+            break
+    return Upimapi
+
+def input_protein_reporter_reCognizer(wildcards):
+    reCOGnizer = expand("input/{sample}_reCOGnizer_results.tsv", sample = set(exps['Sample']))
+    for n in reCOGnizer:
+        if os.path.exists(n) == False:
+            reCOGnizer = expand("{output}/Annotation/{sample}/reCOGnizer_results.xlsx", output = config["output"], sample = set(exps["Sample"]))
+            break
+    return reCOGnizer
+
+def input_protein_reporter_readcounts(wildcards):
+    readcounts = expand("input/{name}.readcounts", name = set(not_mp_exps['Name']))
+    for i in readcounts:
+        if os.path.exists(i) == False:
+            readcounts = expand("{output}/Quantification/{name}.readcounts", output = config["output"], name = set(not_mp_exps['Name']))
+            break
+    return readcounts
+
+def input_entry_report(wildcards):
+    report_entry = "input/MOSCA_Protein_Report.xlsx"
+    if os.path.exists(report_entry) == False:
+        report_entry = f"{config['output']}/MOSCA_Protein_Report.xlsx"
+    return report_entry
+
+def input_differential_expression(wildcards):
+    expression = expand("input/{sample}_expression_matrix.tsv", sample=set(exps["Sample"]))
+    for i in expression:
+        if os.path.exists(i) == False:
+            expression = expand("{output}/Quantification/{sample}/expression_matrix.tsv", output=config['output'], sample=set(exps["Sample"]))
+            break
+    return expression
+
+def input_kegg_charter(wildcards):
+    report_kegg = "input/MOSCA_Entry_Report.xlsx"
+    if os.path.exists(report_kegg)==False:
+        report_kegg = f"{config['output']}/MOSCA_Entry_Report.xlsx"
+    return report_kegg
+        
+def input_report(wildcards):
+    protein_report = expand("input/MOSCA_Protein_Report.xlsx")
+    condition_treated = expand("input/condition_treated_results.tsv")
+    if os.path.exists(protein_report[0]) == False:
+        protein_report = expand(f"{config['output']}/MOSCA_Protein_Report.xlsx")
+    if os.path.exists(condition_treated[0]) == False:
+        condition_treated = expand("{output}/Quantification/{sample}/condition_treated_results.tsv", output=config['output'], sample=set(exps["Sample"]))
+    return protein_report + condition_treated
+
+
+
+rule all:
+    input:
+        all_input
+
+rule preprocess: #Running perfect
+    input:
+        preprocess_input
+    output:
+        expand("{output}/Preprocess/Trimmomatic/quality_trimmed_{{name}}{fr}.fq", output = config["output"],
+            fr = (['_forward_paired', '_reverse_paired'] if exps["Files"].str.contains(',').tolist() else ''))
+    threads:
+        config["threads"]
+    run:
+        shell("python {scripts_dir}/preprocess.py -i {reads} -t {threads} -o {output}/Preprocess "
+              "-d {data_type} -rd {resources_directory} -n {wildcards.name} --minlen {minlen} --avgqual {avgqual}",
+            output = config["output"], reads = ",".join(input), resources_directory = config["resources_directory"],
+            data_type = exps.loc[exps['Name'] == wildcards.name]["Data type"].iloc[0],
+            minlen = config["minimum_read_length"], avgqual = config["minimum_read_average_quality"])
+
+rule join_reads: #Running perfect
+    input:
+        join_reads_input
+    output:
+        expand("{output}/Preprocess/{{sample}}{fr}.fastq", output = config["output"],
+            fr = (['_forward', '_reverse'] if exps["Files"].str.contains(',').tolist() else ''))
+    threads: 1
+    run:
+        for file in input:
+            print(file)
+            if 'forward' in file:
+                shell("touch {output}/Preprocess/{wildcards.sample}_forward.fastq; cat {file} >> "
+                      "{output}/Preprocess/{wildcards.sample}_forward.fastq", output = config["output"])
+            elif 'reverse' in file:
+                shell("touch {output}/Preprocess/{wildcards.sample}_reverse.fastq; cat {file} >> "
+                      "{output}/Preprocess/{wildcards.sample}_reverse.fastq", output = config["output"])
+            else:
+                shell("touch {output}/Preprocess/{wildcards.sample}.fastq; cat {file} >> "
+                      "{output}/Preprocess/{wildcards.sample}.fastq", output = config["output"])
+
+rule assembly: #Running perfect
+    input:
+        input_assembly
+    output:
+        expand("{output}/Assembly/{sample}/contigs.fasta", output = config["output"],
+            sample = set(exps['Sample'])),
+        expand("{output}/Assembly/{sample}/scaffolds.fasta", output = config["output"],
+            sample = set(exps['Sample']))
+    threads:
+        config["threads"]
+    run:
+        reads = ",".join(input)
+        shell("python {scripts_dir}/assembly.py -r {reads} -t {threads} -o {output}/Assembly/{sample} -a {assembler} "
+              "-m {max_memory}",
+            output = config["output"], sample = set(exps['Sample']), assembler = config["assembler"],
+            max_memory = config["max_memory"])
+
+rule binning: #Running perfect
+    input:
+        reads = input_binning_reads,
+        contigs = input_binning_contigs
+    output:
+        expand("{output}/Binning/{sample}/checkm.tsv", output = config["output"], sample = set(exps['Sample']))
+    threads:
+        config["threads"]
+    run:
+        reads = ",".join(input.reads)
+        shell("python {scripts_dir}/binning.py -c {input.contigs} -t {threads} -o {output}/Binning/{sample} -r {reads} "
+              "-mset {markerset}{iterative_binning}",
+              output = config["output"], markerset = config["markerset"], sample = set(exps['Sample']),
+              iterative_binning = ' --iterative-binning' if config['do_iterative_binning'] else '')
+
+rule fastq2fasta: #falar se e necessario, com os inputs deu erro que n percebo de threads
+    input:
+        fastq2fasta_input
+    output:
+        f"{config['output']}/Preprocess/piled_{{sample}}.fasta"
+    threads:
+        1
+    shell:
+        "cat {input} | paste - - - - | cut -f 1,2 | sed 's/^@/>/' | tr '\\t' '\\n' > {output}"
+
+
+rule annotation: #fazer atualizaçao e testas
+    input:
+        annotation_input
+    output:
+        expand("{output}/Annotation/{{sample}}/fgs.faa", output = config["output"]),
+        expand("{output}/Annotation/{{sample}}/fgs.ffn", output = config["output"]),
+        expand("{output}/Annotation/{{sample}}/UPIMAPI_results.tsv", output = config["output"])
+    threads:
+        config["threads"]
+    run:
+        if not config['do_assembly']:
+            input = ",".join(input)
+        shell('python {scripts_dir}/annotation.py -i {input} -t {threads} -o {output}/Annotation/{wildcards.sample} '
+              '-rd {rd} -em {error_model} -db {upimapi_database} -mts {max_target_seqs}{assembled}{taxids} '
+              '-cols "{cols}" -dbs "{dbs}"',
+              output = config["output"],
+              rd = config["resources_directory"],
+              error_model = config["error_model"],
+              upimapi_database = config["upimapi_database"],
+              assembled = ' --assembled' if config['do_assembly'] else '',
+              taxids = f' --taxids {config["upimapi_taxids"]}' if config["upimapi_database"] == 'taxids' else '',
+              max_target_seqs = config["upimapi_max_target_seqs"],
+              cols='&'.join(config['uniprot_columns']), dbs='&'.join(config['uniprot_databases']))
+
+rule recognizer: #Running perfect ##Perguntar se posso mudar o output do recognizer para .tsv ja que e o que e utilizado no protein report.
+    input:
+        input_recognizer
+    output:
+        expand("{output}/Annotation/{sample}/reCOGnizer_results.xlsx", output = config["output"],
+            sample = set(exps["Sample"]))
+    threads:
+        config["threads"] - 1
+    run:
+        shell("recognizer.py -f {input} -t {threads} -o {output}/Annotation/{sample} -rd {resources_directory} "
+              "{download_cdd_resources} -dbs {recognizer_databases} -sd",
+              output = config["output"], sample = set(exps["Sample"]),
+              resources_directory = config["resources_directory"],
+              recognizer_databases = config["recognizer_databases"],
+              download_cdd_resources = '' if not config['download_cdd_resources'] else ' -dr')
+
+rule quantification_analysis: #Running perfect
+    input:
+        contigs = input_quantification_analyses_contigs,
+        fgs = input_quantification_analyses_fgs,
+        quality = input_quantification_analyses_quality
+    output:
+        expand("{output}/Quantification/{name}.readcounts", output = config["output"],
+            name = set(not_mp_exps['Name'])),
+    threads: config["threads"]
+    run:
+        for i in exps.index:
+            for z in input.fgs:
+                if z == f"{config['output']}/Annotation/{exps.iloc[i]['Sample']}/fgs.ffn" or z == f"input/{exps.iloc[i]['Sample']}_fgs.ffn":
+                    fgs_form = z
+                    break
+            for n in input.contigs:
+                if n == f"{config['output']}/Assembly/{exps.iloc[i]['Sample']}/contigs.fasta" or n == f"input/{exps.iloc[i]['Sample']}_contigs.fasta":
+                    contigs_form = n
+                    break
+            if exps.iloc[i]['Data type'] == 'mrna':
+                reference = fgs_form
+            elif exps.iloc[i]['Data type'] == 'dna':
+                reference = contigs_form
+            else:
+                continue
+            Quality_reports = []
+            for m in input.quality:
+                if m in [f"{config['output']}/Preprocess/Trimmomatic/quality_trimmed_{exps.iloc[i]['Name']}_{fr}_paired.fq" for fr in ['forward', 'reverse']] or m in [f"input/quality_trimmed_{exps.iloc[i]['Name']}_{fr}_paired.fq" for fr in ['forward', 'reverse']]:
+                    Quality_reports.append(m)
+            print(Quality_reports)
+            perform_alignment(
+                reference, input.quality,
+                f"{config['output']}/Quantification/{exps.iloc[i]['Name']}", threads=threads)
+        generate_expression_matrix(
+            [f"{config['output']}/Quantification/{mt_name}.readcounts" for mt_name in mt_exps['Name']],
+            mt_exps['Name'].tolist(), f"{config['output']}/Quantification/expression_matrix.tsv")
+
+rule metaphlan: #Running perfect
+    input:
+        input_metaphlan
+    output:
+        expand("{output}/Taxonomy/{sample}_profiled_metagenome.txt", output = config["output"],
+            sample = set(exps["Sample"]))
+    threads: config["threads"]
+    run:
+        reads = ",".join(input)
+        shell("metaphlan {reads} --bowtie2out {output}/Taxonomy/{sample}_mg.bowtie2.bz2 --nproc {threads} --input_type "
+              "fastq",
+              output = config["output"], sample = set(exps["Sample"]))
+        shell("metaphlan {output}/Taxonomy/{sample}_mg.bowtie2.bz2 --nproc {threads} --input_type bowtie2out -o "
+              "{output}/Taxonomy/{sample}_profiled_metagenome.txt",
+              output = config["output"], sample = set(exps["Sample"]))
+
+rule protein_report: #Running perfect (Mostrar alteraçoes script ao joao) e falar do reCOGnizer
+    input:
+        Upimapi = input_protein_reporter_Upimapi,
+        reCognizer = input_protein_reporter_reCognizer,
+        readcounts = input_protein_reporter_readcounts,
+        contigs = input_quantification_analyses_contigs
+    output:
+        f"{config['output']}/MOSCA_Protein_Report.xlsx"
+    threads: 1
+    run:
+        for sample in set(exps['Sample']):
+            for i in input.Upimapi:
+                if i == f"input/{sample}_UPIMAPI_results.tsv" or i == f"output/Annotation/{sample}/UPIMAPI_results.tsv":
+                    Upimapi = i
+                    break
+            for m in input.reCognizer:
+                if m == f"input/{sample}_reCOGnizer_results.tsv" or m == f"output/Annotation/{sample}/reCOGnizer_results.xlsx":
+                    reCognizer = m
+                    break
+            for n in input.contigs:
+                if n == f"input/{sample}_contigs.fasta" or n == f"output/Assembly/{sample}/contigs.fasta":
+                    contigs = n
+                    break
+            print(reCognizer)
+            make_protein_report(Upimapi, reCognizer, input.readcounts, exps, sample, contigs)
+
+rule entry_report: #Running perfect
+    input:
+        report = input_entry_report,
+        Upimapi = input_protein_reporter_Upimapi
+    output:
+        f"{config['output']}/MOSCA_Entry_Report.xlsx",
+        expand("{output}/Quantification/{sample}/expression_matrix.tsv", output = config["output"],
+            sample = set(exps["Sample"]))
+    threads: 1
+    run: make_entry_report(input.report, config["output"], exps, input.Upimapi)
+
+'''
+rule entry_count:
+    input:
+        uniprotinfo=f"{config['output']}/Annotation/uniprotinfo.tsv",
+        blasts=expand("{output}/Annotation/{name}/aligned.blast",output=config["output"], name=mg_exps['Name'].tolist())
+    output:
+        f"{config['output']}/MOSCA_Entry_Counts_Report.xlsx",
+        f"{config['output']}/Quantification/expression_matrix.tsv"
+    threads:
+        1
+    run:
+        uniprotinfo = pd.read_csv(input.uniprotinfo[0], sep='\t')
+        result = pd.DataFrame(columns=['sseqid'])
+        i = 1
+        names = []
+        for blast in input.blasts:
+            name = blast.split('/')[-2]
+            print(f'[{i}/{len(input.blasts)}] Quantifying entries for: {blast}')
+            data = parse_blast(blast).groupby('sseqid').size().reset_index(name=name)
+            data['sseqid'] = [ide.split('|')[1] if ide != '*' else ide for ide in data['sseqid']]
+            result = pd.merge(result, data, on='sseqid', how='outer')
+            i += 1
+            names.append(name)
+        result.columns = ['Entry'] + result.columns.to_list()[1:]
+        print(f'Merging entry counts with info at {input.uniprotinfo[0]}')
+        result = pd.merge(result, uniprotinfo, on='Entry', how='left')
+        multi_sheet_excel(f"{config['output']}/MOSCA_Entry_Counts_Report.xlsx", result, sheet_name='Sheet')
+        result.to_csv(f"{config['output']}/MOSCA_Entry_Counts_Report.tsv", index=False, sep='\t')
+        result[['Entry'] + names].to_csv(f"{config['output']}/Quantification/expression_matrix.tsv",
+                                         sep='\t', index=False)
+'''
+rule differential_expression: #Running perfect
+    input:
+        input_differential_expression
+    output:
+        expand("{output}/Quantification/{{sample}}/condition_treated_results.tsv", output=config['output'])
+    threads:
+        1
+    run:
+        conditions = ",".join(map(str, mt_exps[mt_exps['Sample'] == wildcards.sample]['Condition'].tolist()))
+        shell("Rscript {scripts_dir}/de_analysis.R --readcounts {input} --conditions {conditions} "
+                  "--output {output}/Quantification/{wildcards.sample} --foldchange {minimum_fold_change}",
+                  conditions = conditions, output = config["output"],
+                  minimum_fold_change = config["minimum_differential_expression"])
+
+rule keggcharter: #Running perfect
+    input:
+        input_kegg_charter
+    output:
+        f"{config['output']}/KEGG_maps/KEGGCharter_results.xlsx"
+    threads:
+        1
+    run:
+        shell("keggcharter.py -f {input} -o {output}/KEGG_maps{metabolic_maps} -gcol {mg_cols} -tcol {exp_cols} -tc "
+              "'Taxonomic lineage ({taxa_level})' -not {number_of_taxa} -keggc 'Cross-reference (KEGG)'",
+              output = config["output"], mg_cols = ','.join(mg_exps['Name'].tolist()),
+              metabolic_maps = f" -mm {','.join(config['keggcharter_maps']) if len(config['keggcharter_maps']) > 0 else ''}",
+              exp_cols = ','.join(mt_exps['Name'].tolist()), taxa_level = config["keggcharter_taxa_level"],
+              number_of_taxa = config["keggcharter_number_of_taxa"])
+
+        shutil.copyfile(f"{config['output']}/KEGGCharter_results.xlsx",
+                        input)
+
+rule report: ##testar rule mais complicada #joao disse para deixar.
+    input:
+        input_report
+    output:
+        f"{config['output']}/technical_report.tsv",
+        f"{config['output']}/MOSCA_General_Report.xlsx",
+        f"{config['output']}/MOSCA_results.zip"
+    threads:
+        1
+    run:
+        shell("python {scripts_dir}/report.py -e {output}/exps.tsv -o {output} -ldir {reporter_lists} -if tsv{suffix}",
+              output = config["output"], reporter_lists = f'{scripts_dir}/../resources',
+              suffix = f' -s {config["suffix"]}' if config["suffix"] != '' else '')
+
+
