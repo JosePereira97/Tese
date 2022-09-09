@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: MOSCA
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: MOSCA
+  template:
+    metadata:
+      labels:
+        app: MOSCA
+    spec:
+      containers:
+      - name: MOSCA
+        image: MOSCA:latest
+        imagePullPolicy: Never
+        resource:
+          limits:
+            memory: 5000Mi
+            cpu: "10"
+        ports:
+        - containerPort: 5000
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: MOSCA-service
+spec: 
+  ports:
+  - port: 8000
+    targetPort: 5000
+    protocol: TCP
+  selector:
+    app: MOSCA
+  type: LoadBalancer
