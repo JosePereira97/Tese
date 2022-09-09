@@ -1,8 +1,9 @@
+import mimetypes
 from multiprocessing import connection
 from subprocess import IDLE_PRIORITY_CLASS
 from tkinter.tix import Tree
 from typing import Type
-from flask import Flask, request, send_file
+from flask import Flask, request, send_file, Response
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from flask_cors import CORS
@@ -14,6 +15,8 @@ import copy
 import os
 import zipfile
 import glob
+import ast
+from zipfile import ZipFile
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:password@localhost/Teses'
@@ -67,7 +70,7 @@ class Output_Files(db.Model):
 
 
 def clear_output_files():
-    delete_Output = Output_Files.query.filter_by(data <= (datetime.now - timedelta(days=7))).all()
+    delete_Output = Output_Files.query.filter_by(Output_Files.data <= (datetime.now - timedelta(days=7))).all()
     for Output in delete_Output:
         hashtag = Output.hashcode_output
         shutil.rmtree(f'Output_{hashtag}')
@@ -99,8 +102,14 @@ def Save_Input_Files():
     parent_User_id = request.form['userId']
     if os.path.exists(f'{file_path}/{parent_User_id}') == False:
         os.makedirs(f'{file_path}/{parent_User_id}')
-    if get_dir_size(f'{file_path}/{parent_User_id}') > 20000000000: #atualemte esta para 20 GB podemos alterar
+    if get_dir_size(f'{file_path}/{parent_User_id}') > 21474836480: #atualemte esta para 20 GB podemos alterar
         return('The paste is full')
+    obj = os.scandir(f'{file_path}/{parent_User_id}')
+    for i in obj:
+        file_name_orig = i.name.rsplit('.', 1)
+        file_name = file_name_orig[0].rsplit('_',1)
+        if file_name[0] + '.' + file_name_orig[1] == file.filename:
+            return('File already contain the name')
     Input_info = Input_Files(Type, parent_User_id)
     db.session.add(Input_info)
     db.session.commit()
@@ -133,38 +142,89 @@ def get_user_inputs():
     if os.path.exists(f'{file_path}/{User}') == False:
         return('No input files')
     Files = db.session.query(Input_Files).filter(Input_Files.parent_User_id==User)
-    Response_data = {}
+    Response_data = []
     myfiles = []
     obj = os.scandir(f'{file_path}/{User}')
     for entry in obj:
         myfiles.append(entry.name)
     for i in Files:
         for m in myfiles:
-            file_name = m.rsplit('.', 1)
-            file_name = file_name[0].rsplit('_',1)
-            print(i.id)
-            print(file_name[1])
+            file_name_orig = m.rsplit('.', 1)
+            file_name = file_name_orig[0].rsplit('_',1)
             if int(i.id) == int(file_name[1]):
-                Response_data[m] = (i.Type, i.id)
-                break #ja encontramos o match do i usamos o break para n gastar mais recurso,e n existem ficheiros com o mesmo ID.
-    print(Response_data)
-    return(Response_data)
+                Response_data.append({'file_name':file_name[0] + '.' + file_name_orig[1], 'file_type': i.Type, 'data': i.data , 'id': i.id})
+                break
+    
+    return({'my_info':Response_data})
 
-@app.route('/delete_inputs')
+@app.route('/delete_inputs', methods=['DELETE'])
 def delete_inputs():
-    id = json.loads(request.data)
+    id = request.form['idDelete']
+    User = request.form['User_id']
+    obj = os.scandir(f'{file_path}/{User}')
+    id = ast.literal_eval(id)
     for i in id:
         Input_Files.query.filter_by(id=i).delete()
-    return('Files deleted sucessful')
+        for entry in obj:
+            file_name_orig = entry.name.rsplit('.', 1)
+            file_name = file_name_orig[0].rsplit('_',1)
+            if int(i) == int(file_name[1]):
+                os.remove(f'{file_path}/{User}/{entry.name}')
+        
+    return('File deleted sucessful')
 
-@app.route('/get/<file_id>')
-def get_files(file_id):
-    file = Input_Files.query.filter_by(id=file_id)
-    obj = os.scandir(f'{file_path}/{file.parent_User_id}')
+@app.route('/Download_Files', methods=['POST'])
+def get_files():
+    id = request.form['idDownload']
+    User = request.form['User_id']
+    obj = os.scandir(f'{file_path}/{User}')
+    id = ast.literal_eval(id)
+    if len(id) == 1:
+        for entry in obj:
+            file_name_orig = entry.name.rsplit('.', 1)
+            id_check = file_name_orig[0].rsplit('_',1)
+            if int(id_check[1]) == int(id[0]):
+                return send_file(f'{file_path}/{User}/{entry.name}', download_name=id_check[0] + '.' + file_name_orig[1])
+    else:
+        ZipObj = ZipFile(f'{file_path}/Input_MOSCA.zip', 'w')
+        for i in id:
+            for entry in obj:
+                file_name_orig = entry.name.rsplit('.', 1)
+                id_check = file_name_orig[0].rsplit('_',1)
+                if int(id_check[1]) == int(i):
+                    ZipObj.write(f'{file_path}/{User}/{entry.name}', arcname= id_check[0] + '.' + file_name_orig[1])
+        ZipObj.close()
+        print(send_file(f'{file_path}/Input_MOSCA.zip', download_name='MOSCA.zip', mimetype='zip',as_attachment=True))
+        response = Response(f'{file_path}/Input_MOSCA.zip')
+        @response.call_on_close
+        def close_zip():
+            os.remove(f'{file_path}/Input_MOSCA.zip')
+        return send_file(response , download_name='MOSCA.zip', mimetype='zip',as_attachment=True)
+
+@app.route('/inputsType', methods=['POST'])
+def getfiles():
+    User = request.form['User_id']
+    tipe = json.loads(request.form['Types'])
+    if os.path.exists(f'{file_path}/{User}') == False:
+        return('No input files')
+    Files = []
+    for i in tipe:
+        Teste = db.session.query(Input_Files).filter(Input_Files.parent_User_id==User).filter(Input_Files.Type==i)
+        Files.append(Teste)
+    Response_data = []
+    myfiles = []
+    obj = os.scandir(f'{file_path}/{User}')
     for entry in obj:
-        id_check = entry.name.rsplit('_',1)
-        if int(id_check) == int(file_id):
-            return send_file(f'{file_path}/{file.parent_User_id}/{entry.name}', attachment_filename=entry.name)
+        myfiles.append(entry.name)
+    for i in Files:
+        for z in i:
+            for m in myfiles:
+                file_name_orig = m.rsplit('.', 1)
+                file_name = file_name_orig[0].rsplit('_',1)
+                if int(z.id) == int(file_name[1]):
+                    Response_data.append({'file_name':file_name[0] + '.' + file_name_orig[1], 'file_type': z.Type})
+                    break
+    return({'my_info':Response_data})
 
 @app.route('/results')
 def get_resuls():
@@ -173,7 +233,7 @@ def get_resuls():
 
 @app.route('/get_Analyses_realizated/<hashcode>')
 def get_Analyses_realizated(hashcode):
-    #funçao usa hashcode para ir buscar todas as anlises realizadas.
+    #funçao usa hashcode para ir buscar todas as analises realizadas.
     pass
 
 @app.route('/get_Results/<hashcode><analyses_Name>')

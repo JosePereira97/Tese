@@ -16,24 +16,31 @@ def input():
     pic = request.files['el_file']
     file['el_file'] = (pic.filename, pic.stream, pic.content_type, pic.headers)
     resposta = requests.post('http://localhost:5000/Save_Input_Files', data=request.form.to_dict(), files=file)
-    if resposta.content == 'The paste is full':
+    if resposta.text == 'The paste is full':
         return('No space') ##riderect the page to my inputs to show the space limit, and to let them delete input files.
-    return('done')
+    elif resposta.text == 'File already contain the name':
+        return('File already Exists')
+    return('File updated')
     #Ter atençao pois as respostas podes ser diferentes fazer alteraçoes
 
 @app.route('/Get_my_inputs', methods=['POST'])
 def all_inputs():
     resposta = requests.get('http://localhost:5000/all_inputs', data=request.form)
-    print(resposta.content)
     if resposta.content == 'No input files':
         return []
     else:
         return resposta.content
 
-@app.route('/Get_my_inputs/Delete_Files')
+@app.route('/Get_my_inputs/Delete_Files', methods=['POST'])
 def delete_inputs():
-    resposta = requests.delete('http://localhost:5000/delete_inputs', data = request.data)
+    resposta = requests.delete('http://localhost:5000/delete_inputs', data = request.form)
     return resposta.content
+
+@app.route('/Get_my_inputs/Download_Files', methods=['POST'])
+def download_inputs():
+    resposta = requests.post('http://localhost:5000//Download_Files', data = request.form)
+    return resposta.content
+
 
 @app.route('/Submit_for_analyses')
 def start_analyses():
@@ -49,6 +56,12 @@ def start_analyses():
         count += 1
     get_response = request.post() #Meter URL do servidor para começar analise.
     return(get_response.content)
+
+@app.route('/Get_my_inputs/StartAnalyses', methods=['POST'])
+def get_files():
+    resposta = requests.post('http://localhost:5000/inputsType', data=request.form)
+    return resposta.content
+
 
 @app.route('/Get_my_analyses')
 def my_analyses():
