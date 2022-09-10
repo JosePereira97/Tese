@@ -1,11 +1,15 @@
+from importlib.metadata import files
+from unicodedata import name
 from urllib import response
-from flask import Flask, request, send_file
+from flask import Flask, request, send_file, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from flask_cors import CORS
 import requests
 import json
 from io import BytesIO
+import tempfile
+import ast
 
 app = Flask(__name__)
 CORS(app)
@@ -15,6 +19,7 @@ def input():
     file = {}
     pic = request.files['el_file']
     file['el_file'] = (pic.filename, pic.stream, pic.content_type, pic.headers)
+    print(file)
     resposta = requests.post('http://localhost:5000/Save_Input_Files', data=request.form.to_dict(), files=file)
     if resposta.text == 'The paste is full':
         return('No space') ##riderect the page to my inputs to show the space limit, and to let them delete input files.
@@ -42,19 +47,25 @@ def download_inputs():
     return resposta.content
 
 
-@app.route('/Submit_for_analyses')
+@app.route('/Submit_for_analyses', methods=['POST'])
 def start_analyses():
-    config = request.data['Config_file']
-    Data_files = request.data['Files']
+    config = request.form['config']
+    Data_files = json.loads(request.form['Files'])
+    workflow = request.form['Workflow']
+    User = request.form['User_id']
     files_info = {}
-    count = 0
-    for file in Data_files:
-        get_file = requests.get(f'http://localhost:5000/get/{file.id}') #Fazer na BD get file By_ID
-        #if file.type is #fazer com tipos de files que podem ser scafolds etc. Para dar o nome da sample.
-            #dar o nome ao ficheiro e adicionar ao files_info
-        files_info[count] = get_file.content
-        count += 1
-    get_response = request.post() #Meter URL do servidor para começar analise.
+    data = {}
+    for row in Data_files:
+        for file in Data_files[row]:
+            get_file = requests.get('http://localhost:5000/getFileForAnalyses', data={'User_id':User, 'File_Name':file})
+            f = tempfile.SpooledTemporaryFile()
+            f.write(get_file.content)
+            files_info[file] = (f)
+    data['User'] = User
+    data['config'] = config
+    data['Workflow'] = workflow
+    print(config)
+    get_response = requests.post('http://127.0.0.1:5003/run_MOSCA full workflow',data=data,files=files_info ) #Meter URL do servidor para começar analise.
     return(get_response.content)
 
 @app.route('/Get_my_inputs/StartAnalyses', methods=['POST'])

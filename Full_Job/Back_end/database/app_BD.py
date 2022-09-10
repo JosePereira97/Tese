@@ -184,7 +184,7 @@ def get_files():
             file_name_orig = entry.name.rsplit('.', 1)
             id_check = file_name_orig[0].rsplit('_',1)
             if int(id_check[1]) == int(id[0]):
-                return send_file(f'{file_path}/{User}/{entry.name}', download_name=id_check[0] + '.' + file_name_orig[1])
+                return send_file(f'{file_path}/{User}/{entry.name}', download_name=id_check[0] + '.' + file_name_orig[1], as_attachment=True)
     else:
         ZipObj = ZipFile(f'{file_path}/Input_MOSCA.zip', 'w')
         for i in id:
@@ -194,7 +194,6 @@ def get_files():
                 if int(id_check[1]) == int(i):
                     ZipObj.write(f'{file_path}/{User}/{entry.name}', arcname= id_check[0] + '.' + file_name_orig[1])
         ZipObj.close()
-        print(send_file(f'{file_path}/Input_MOSCA.zip', download_name='MOSCA.zip', mimetype='zip',as_attachment=True))
         response = Response(f'{file_path}/Input_MOSCA.zip')
         @response.call_on_close
         def close_zip():
@@ -226,10 +225,17 @@ def getfiles():
                     break
     return({'my_info':Response_data})
 
-@app.route('/results')
-def get_resuls():
-    #funçao que vais buscar a Analyses_names das analises realizadas pelo User.
-    pass
+@app.route('/getFileForAnalyses')
+def get_Files():
+    User = request.form['User_id']
+    file_name = request.form['File_Name']
+    obj = os.scandir(f'{file_path}/{User}')
+    for entry in obj:
+        file_name_orig = entry.name.rsplit('.', 1)
+        file_nameWithoutMimeType = file_name_orig[0].rsplit('_',1)
+        if file_name == file_nameWithoutMimeType[0] + '.' + file_name_orig[1]:
+            return send_file(f'{file_path}/{User}/{entry.name}', download_name=f'{file_name}')
+
 
 @app.route('/get_Analyses_realizated/<hashcode>')
 def get_Analyses_realizated(hashcode):
