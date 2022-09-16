@@ -10,8 +10,11 @@ import json
 from io import BytesIO
 import tempfile
 import ast
+from ChangeNames import ChangeFileName
+from check_Login import decode_cookie
 
 app = Flask(__name__)
+app.before_request_funcs.setdefault(None, [decode_cookie])
 CORS(app)
 
 @app.route('/Submit_input_file', methods=['POST'])
@@ -57,15 +60,16 @@ def start_analyses():
     data = {}
     for row in Data_files:
         for file in Data_files[row]:
-            get_file = requests.get('http://localhost:5000/getFileForAnalyses', data={'User_id':User, 'File_Name':file})
+            name = ChangeFileName(file, row, workflow[0], config)
+            get_file = requests.post('http://localhost:5000/getFileForAnalyses', data={'User_id':User, 'File_Name':file})
             f = tempfile.SpooledTemporaryFile()
             f.write(get_file.content)
-            files_info[file] = (f)
+            f.seek(0)
+            files_info[name] = (f)
     data['User'] = User
     data['config'] = config
     data['Workflow'] = workflow
-    print(config)
-    get_response = requests.post('http://127.0.0.1:5003/run_MOSCA full workflow',data=data,files=files_info ) #Meter URL do servidor para começar analise.
+    get_response = requests.post('http://127.0.0.1:5003/run_MOSCA full workflow',data=data,files=files_info )
     return(get_response.content)
 
 @app.route('/Get_my_inputs/StartAnalyses', methods=['POST'])
