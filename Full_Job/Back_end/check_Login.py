@@ -5,9 +5,7 @@ import jwt
 from flask import g, request, abort, make_response
 
 def decode_cookie():
-    print(jwt.__file__)
     cookie = request.cookies.get("user")
-    print('Abrasado')
     print(cookie)
 
     if not cookie:

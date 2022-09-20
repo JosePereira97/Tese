@@ -24,7 +24,7 @@ def input():
     file['el_file'] = (pic.filename, pic.stream, pic.content_type, pic.headers)
     data = request.form.to_dict()
     data['User_id']= g.cookie['email']
-    resposta = requests.post('http://localhost:5000/Save_Input_Files', data=request.form.to_dict(), files=file)
+    resposta = requests.post('http://localhost:5000/Save_Input_Files', data=data, files=file)
     if resposta.text == 'The paste is full':
         return('No space')
     elif resposta.text == 'File already contain the name':
@@ -57,6 +57,7 @@ def download_inputs():
 @app.route('/Submit_for_analyses', methods=['POST'])
 def start_analyses():
     config = request.form['config']
+    print(config)
     Data_files = json.loads(request.form['Files'])
     workflow = request.form['Workflow']
     User = g.cookie['email']
@@ -70,7 +71,7 @@ def start_analyses():
             f.write(get_file.content)
             f.seek(0)
             files_info[name] = (f)
-    data['User'] = User
+    data['User_id'] = User
     data['config'] = config
     data['Workflow'] = workflow
     get_response = requests.post('http://127.0.0.1:5003/run_MOSCA full workflow',data=data,files=files_info )
@@ -78,13 +79,15 @@ def start_analyses():
 
 @app.route('/Get_my_inputs/StartAnalyses', methods=['POST'])
 def get_files():
-    data = request.form
+    data = request.form.to_dict()
+    print(data)
     data['User_id']= g.cookie['email']
+    print(data)
     resposta = requests.post('http://localhost:5000/inputsType', data=data)
     return resposta.content
 
 
-@app.route('/Get_my_analyses')
+@app.route('/Get_my_analyses') ##falta construir funçoes para ir buscar os resultados
 def my_analyses():
     #fuction to retrive all analyses names from the user.
     pass

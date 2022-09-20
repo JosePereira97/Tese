@@ -1,6 +1,6 @@
 from flask import json
 
-def ChangeFileName(file, row, analyse, config):
+def ChangeFileName(file, row, analyse, config): #mudar o nome dos ficheiros em falta
     config = json.loads(config)
     if analyse == 'join_reads':
         ##Arranjar maneira de descobrir qual e a reversed_paired ou a forward paired. ##soluçao alterar botoes

@@ -20,12 +20,14 @@ from zipfile import ZipFile
 from MY_zip_results import Get_my_Files
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
+import magic
+mime = magic.Magic(mime=True)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = "\xfd{H\xe5<\x95\xf9\xe3\x96.5\xd1\x01O<!\xd5\xa2\xa0\x9fR\xa1\xa8"
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:password@localhost/Teses'
 db = SQLAlchemy(app)
-CORS(app, resources={r"/Login/*": {"origins": "*"}}, supports_credentials=True)
+CORS(app, origins='*', supports_credentials=True)
 User_id_seq = db.Sequence('The_seq')
 id_Seq = db.Sequence('id_Seq')
 file_path = os.path.abspath(os.path.dirname(__file__))
@@ -86,8 +88,8 @@ class Output_Files(db.Model):
         self.Rules_runned = Analyses_runned
 
 
-def clear_output_files(): #precisa de ser testada again, problema na query da data.
-    delete_Output = Output_Files.query.filter_by(Output_Files.data <= (datetime.now() - timedelta(days=7))).all()
+def clear_output_files():
+    delete_Output = Output_Files.query.filter(Output_Files.data <= (datetime.now() - timedelta(days=7))).all()
     for Output in delete_Output:
         Output_Files.query.filter_by(hashcode_output=Output.hashcode_output).delete()
         hashtag = Output.hashcode_output
@@ -165,9 +167,11 @@ def logOut():
 
 @app.route('/Save_Input_Files', methods = ['POST'])
 def Save_Input_Files():
+    print(request.data)
+    print(request.form)
     file = request.files['el_file']
     Type = request.form['type']
-    parent_User_id = request.form['userId']
+    parent_User_id = request.form['User_id']
     if os.path.exists(f'{file_path}/{parent_User_id}') == False:
         os.makedirs(f'{file_path}/{parent_User_id}')
     if get_dir_size(f'{file_path}/{parent_User_id}') > 21474836480: #atualemte esta para 20 GB podemos alterar
@@ -178,7 +182,9 @@ def Save_Input_Files():
         file_name = file_name_orig[0].rsplit('_',1)
         if file_name[0] + '.' + file_name_orig[1] == file.filename:
             return('File already contain the name')
-    Input_info = Input_Files(Type, parent_User_id)
+    Input_info = Input_Files()
+    Input_info.Type = Type
+    Input_info.parent_User_id = parent_User_id
     db.session.add(Input_info)
     db.session.commit()
     id_info = Input_info.id
@@ -194,7 +200,7 @@ def Save_Output_Files():
     file_like_object = file.stream._file
     zipfile_ob = zipfile.ZipFile(file_like_object)
     Analyses_name = request.form['Analyses_name']
-    parent_User_id = request.form['parent_User_id']
+    parent_User_id = request.form['User_id']
     Analyses_runed = request.form['Analyses_runed']
     print(Analyses_runed)
     Output_info = Output_Files(Analyses_name, parent_User_id, Analyses_runed)
@@ -245,7 +251,7 @@ def delete_inputs():
         
     return('File deleted sucessful')
 
-@app.route('/Download_Files', methods=['POST'])
+@app.route('/Download_Files', methods=['POST']) ##URL eventualmente vai ter de ser chamado diretamente para o /Download_Files devido ao send_file
 def get_files():
     id = request.form['idDownload']
     User = request.form['User_id']
@@ -306,7 +312,7 @@ def get_Files():
         file_name_orig = entry.name.rsplit('.', 1)
         file_nameWithoutMimeType = file_name_orig[0].rsplit('_',1)
         if file_name == file_nameWithoutMimeType[0] + '.' + file_name_orig[1]:
-            return send_file(f'{file_path}/{User}/{entry.name}', download_name=f'{file_name}')
+            return send_file(f'{file_path}/{User}/{entry.name}', download_name=f'{file_name}', mimetype= mime.from_file(f'{file_path}/{User}/{entry.name}'))
 
 
 @app.route('/get_Analyses_realizated', methods=['POST'])
@@ -318,7 +324,7 @@ def get_Analyses_realizated():
         All_analyses.append({'analyses_name':i.Analyses_name, 'id':i.hashcode_output, 'workflow': i.Rules_runned})
     return({'my_Analyses': All_analyses})
 
-@app.route('/downloadResults', methods=['POST'])
+@app.route('/downloadResults', methods=['POST']) ##enviar diretamente para o Results responsavel por fazer o zip de todos os resultados
 def download_my_results():
     Analyses_Name = request.form['Analyses_name']
     Hashcode = request.form['Hashcode']
@@ -333,14 +339,14 @@ def download_my_results():
 def get_visual_results():
     workflow = request.form['Workflow']
     if 'all' in workflow:
-        return send_file()
+        return send_file() ##Se correu o workflow todo enviar o ficheiro de Results.ZIP
     else:
-        Get_my_Files(workflow) #funçao que vamos criar para construir o zip file
+        Get_my_Files(workflow) #funçao que vamos criar para construir o zip file de resultados visiveis no MOSGUITO
         response = Response()
         @response.call_on_close
         def delete_archive():
-            os.remove()
-        return send_file()
+            os.remove() ##Remove o archive criado na Get_my_Files
+        return send_file() ##send_file provavelmente direto para o MOSGUITO. ou senao so o download faz isso
 
 
 if __name__ == '__main__':
