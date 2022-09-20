@@ -9,6 +9,11 @@ flask-sqlalchemy = "*"
 psycopg2 = "*"
 python-dotenv = "*"
 flask-cors = "*"
+flask-restful = "*"
+pyopenssl = "*"
+pyjwt = "*"
+flask-jwt-extended = "*"
+requests = "*"
 
 [dev-packages]
 

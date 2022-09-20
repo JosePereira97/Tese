@@ -3,7 +3,7 @@ from multiprocessing import connection
 from subprocess import IDLE_PRIORITY_CLASS
 from tkinter.tix import Tree
 from typing import Type
-from flask import Flask, request, send_file, Response, make_response
+from flask import Flask, request, send_file, Response, make_response, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from flask_cors import CORS
@@ -22,15 +22,17 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = "\xfd{H\xe5<\x95\xf9\xe3\x96.5\xd1\x01O<!\xd5\xa2\xa0\x9fR\xa1\xa8"
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:password@localhost/Teses'
 db = SQLAlchemy(app)
-CORS(app)
+CORS(app, resources={r"/Login/*": {"origins": "*"}}, supports_credentials=True)
 User_id_seq = db.Sequence('The_seq')
+id_Seq = db.Sequence('id_Seq')
 file_path = os.path.abspath(os.path.dirname(__file__))
 class Users(db.Model):
     __tablename__ = 'Users'
     __table_args__ = (db.UniqueConstraint("google_id"), db.UniqueConstraint("email"))
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer,id_Seq, primary_key=True)
     google_id = db.Column(db.String, nullable=True)
     User_id = db.Column(db.String(45), nullable = False, primary_key = True, unique=True)
     _password = db.Column(db.String)
@@ -55,23 +57,17 @@ class Users(db.Model):
     def __repr__(self):
         return f'User_id: {self.User_id}'
 
-    def __init__(self, User_id, Password):
-        self.User_id = User_id
-        self.Password = Password
 
 class Input_Files(db.Model):
     __tablename__ = 'Input_Files'
     id = db.Column(db.Integer, primary_key = True)
     Type = db.Column(db.String(45), nullable = False)
-    parent_User_id = db.Column(db.String(45), db.ForeignKey("Users.User_id"), nullable = False) #Parent que vai ser o nome onde os ficheiros vao ser guardados
+    parent_User_id = db.Column(db.String(45), db.ForeignKey("Users.User_id"), nullable = False)
     data = db.Column(db.DateTime, nullable = False, default =datetime.now)
 
     def __repr__(self):
         return {'id':f'{self.id}'}
     
-    def __init__(self, Type, parent_User_id):
-        self.Type = Type
-        self.parent_User_id = parent_User_id
 
 class Output_Files(db.Model):
     __tablename__ = 'Output_Files'
@@ -108,34 +104,64 @@ def get_dir_size(path='.'):
                 total += get_dir_size(entry.path)
     return total
 
-@app.route('/Save_User', methods = ['POST'])
+@app.route('/Login/Watch_Cookies', methods = ['POST'])
+def teste():
+    if request.cookies.get('user') != None:
+        return('sucess')
+    return('User timedout')
+    
+
+@app.route('/Login/Save_User', methods = ['POST'])
 def User():
     data = request.get_json()
-
     user = Users.query.filter(
-        func.lower(Users.email) == data["email"].strip().lower()
+        Users.email == data["email"]
     ).first()
-
     if user:
-        return(400, "This email address is already in use.")
+        return("This email address is already in use.")
 
     user = Users()
     user.email = data["email"].strip()
+    user.User_id = data["email"].strip()
     user.password = data["password"].strip()
     user.last_login = datetime.now()
+    user.given_name = data['name'].strip()
 
     db.session.add(user)
     db.session.commit()
-
     response = make_response("")
     response.set_cookie(
         "user",
         jwt.encode(
-            UserSchema().dump(user), app.config["SECRET_KEY"], algorithm="HS256" ##UserSchema tem que ser criado para fazer o jwt
-        ),
+            {'id': user.id, 'email': user.email}, app.config["SECRET_KEY"], algorithm="HS256"
+        ), httponly=True, expires= (datetime.now() + timedelta(hours=1)), samesite='None', secure=True
     )
+    return response
 
-    return response #Se der match no Login vai devolver o JWT.encode contendo info do UserSchema
+@app.route('/Login/Check_Credentials', methods = ['POST'])
+def check_login():
+    data = request.get_json()
+    user = Users.query.filter(
+        Users.email == data["email"]
+    ).first()
+    if user:
+        check = user.verify_password(data['password'])
+        if not check:
+            return('Wrong Password')
+        user.last_login = datetime.now()
+        response = make_response("")
+        response.set_cookie("user", jwt.encode(
+            {'id': user.id, 'email': user.email}, app.config["SECRET_KEY"], algorithm="HS256"
+        ), httponly=True, expires= (datetime.now() + timedelta(hours=1)), samesite='None', secure=True, domain='127.0.0.1')
+        return response
+    return('No user with the correpondig User_Id')
+
+@app.route('/Login/Logout', methods=['POST'])
+def logOut():
+    cookie = request.cookies.get("user")
+    response = make_response("")
+    response.set_cookie('user',expires=0,samesite='None', secure=True, domain='127.0.0.1' )
+    return response
 
 @app.route('/Save_Input_Files', methods = ['POST'])
 def Save_Input_Files():
@@ -183,6 +209,7 @@ def Save_Output_Files():
 @app.route('/all_inputs')
 def get_user_inputs():
     User = request.form['User_id']
+    print(User)
     if os.path.exists(f'{file_path}/{User}') == False:
         return('No input files')
     Files = db.session.query(Input_Files).filter(Input_Files.parent_User_id==User)
@@ -190,6 +217,7 @@ def get_user_inputs():
     myfiles = []
     obj = os.scandir(f'{file_path}/{User}')
     for entry in obj:
+        print(entry.name)
         myfiles.append(entry.name)
     for i in Files:
         for m in myfiles:

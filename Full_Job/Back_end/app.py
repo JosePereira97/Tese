@@ -1,7 +1,7 @@
 from importlib.metadata import files
 from unicodedata import name
 from urllib import response
-from flask import Flask, request, send_file, jsonify
+from flask import g,Flask, request, send_file, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from flask_cors import CORS
@@ -15,25 +15,25 @@ from check_Login import decode_cookie
 
 app = Flask(__name__)
 app.before_request_funcs.setdefault(None, [decode_cookie])
-CORS(app)
+CORS(app, supports_credentials=True, origins='*')
 
 @app.route('/Submit_input_file', methods=['POST'])
 def input():
     file = {}
     pic = request.files['el_file']
     file['el_file'] = (pic.filename, pic.stream, pic.content_type, pic.headers)
-    print(file)
+    data = request.form.to_dict()
+    data['User_id']= g.cookie['email']
     resposta = requests.post('http://localhost:5000/Save_Input_Files', data=request.form.to_dict(), files=file)
     if resposta.text == 'The paste is full':
-        return('No space') ##riderect the page to my inputs to show the space limit, and to let them delete input files.
+        return('No space')
     elif resposta.text == 'File already contain the name':
         return('File already Exists')
     return('File updated')
-    #Ter atençao pois as respostas podes ser diferentes fazer alteraçoes
 
 @app.route('/Get_my_inputs', methods=['POST'])
 def all_inputs():
-    resposta = requests.get('http://localhost:5000/all_inputs', data=request.form)
+    resposta = requests.get('http://localhost:5000/all_inputs', data={'User_id':g.cookie['email']})
     if resposta.content == 'No input files':
         return []
     else:
@@ -41,12 +41,16 @@ def all_inputs():
 
 @app.route('/Get_my_inputs/Delete_Files', methods=['POST'])
 def delete_inputs():
-    resposta = requests.delete('http://localhost:5000/delete_inputs', data = request.form)
+    data = request.form
+    data['User_id']= g.cookie['email']
+    resposta = requests.delete('http://localhost:5000/delete_inputs', data = data)
     return resposta.content
 
 @app.route('/Get_my_inputs/Download_Files', methods=['POST'])
 def download_inputs():
-    resposta = requests.post('http://localhost:5000//Download_Files', data = request.form)
+    data = request.form
+    data['User_id']= g.cookie['email']
+    resposta = requests.post('http://localhost:5000//Download_Files', data = data)
     return resposta.content
 
 
@@ -55,7 +59,7 @@ def start_analyses():
     config = request.form['config']
     Data_files = json.loads(request.form['Files'])
     workflow = request.form['Workflow']
-    User = request.form['User_id']
+    User = g.cookie['email']
     files_info = {}
     data = {}
     for row in Data_files:
@@ -74,7 +78,9 @@ def start_analyses():
 
 @app.route('/Get_my_inputs/StartAnalyses', methods=['POST'])
 def get_files():
-    resposta = requests.post('http://localhost:5000/inputsType', data=request.form)
+    data = request.form
+    data['User_id']= g.cookie['email']
+    resposta = requests.post('http://localhost:5000/inputsType', data=data)
     return resposta.content
 
 
