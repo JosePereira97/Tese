@@ -80,27 +80,32 @@ def start_analyses():
 @app.route('/Get_my_inputs/StartAnalyses', methods=['POST'])
 def get_files():
     data = request.form.to_dict()
-    print(data)
     data['User_id']= g.cookie['email']
-    print(data)
     resposta = requests.post('http://localhost:5000/inputsType', data=data)
     return resposta.content
 
 
 @app.route('/Get_my_analyses') ##falta construir funçoes para ir buscar os resultados
 def my_analyses():
-    #fuction to retrive all analyses names from the user.
-    pass
+    resposta = requests.get('http://localhost:5000/all_outputs', data={'User_id':g.cookie['email']})
+    if resposta.content == 'No output Files':
+        return []
+    else:
+        return resposta.content
 
-@app.route('/Get_my_analyses/Get_Diferent_Outputs')
+@app.route('/Get_my_analyses/Download_Results')
 def my_outputs():
-    #fuction to retrieve steps made in the analyse
+    data = request.form.to_dict()
+    data['User_id']= g.cookie['email']
+    resposta = requests.post('http://localhost:5000/downloadResults', data=data)
     pass
 
 @app.route('/Get_my_analyses/Get_Diferent_Outputs/results')
 def my_results():
-    #fuction that get the files and show them in front_end
-    pass
+    data = request.form.to_dict()
+    data['User_id']= g.cookie['email']
+    resposta = requests.get('http://localhost:5000/GetVisualizatedResults', data=data)
+    return resposta.content
 
 
 

@@ -262,7 +262,7 @@ def get_files():
             file_name_orig = entry.name.rsplit('.', 1)
             id_check = file_name_orig[0].rsplit('_',1)
             if int(id_check[1]) == int(id[0]):
-                return send_file(f'{file_path}/{User}/{entry.name}', download_name=id_check[0] + '.' + file_name_orig[1], as_attachment=True)
+                return send_file(f'{file_path}/{User}/{entry.name}', download_name=id_check[0] + '.' + file_name_orig[1], as_attachment=True, mimetype= mime.from_file(f'{file_path}/{User}/{entry.name}'))
     else:
         ZipObj = ZipFile(f'{file_path}/Input_MOSCA.zip', 'w')
         for i in id:
@@ -276,7 +276,7 @@ def get_files():
         @response.call_on_close
         def close_zip():
             os.remove(f'{file_path}/Input_MOSCA.zip')
-        return send_file(f'{file_path}/Input_MOSCA.zip' , download_name='MOSCA.zip', mimetype='zip',as_attachment=True)
+        return send_file(f'{file_path}/Input_MOSCA.zip' , download_name='MOSCA.zip', mimetype= mime.from_file(f'{file_path}/Input_MOSCA.zip'),as_attachment=True)
 
 @app.route('/inputsType', methods=['POST'])
 def getfiles():
@@ -326,20 +326,25 @@ def get_Analyses_realizated():
 
 @app.route('/downloadResults', methods=['POST']) ##enviar diretamente para o Results responsavel por fazer o zip de todos os resultados
 def download_my_results():
-    Analyses_Name = request.form['Analyses_name']
-    Hashcode = request.form['Hashcode']
-    shutil.make_archive(f'{file_path}/{Analyses_Name}RESULTS', 'zip', f'{file_path}/Output_{Hashcode}')
+    User = request.form['User_id']
+    hashcODE = request.form['ID']
+    Output_File = db.session.query(Output_Files).filter(Output_Files.parent_User_id==User).filter(Output_Files.hashcode_output==hashcODE)
+    Analyses_Name = Output_File.Analyses_name
+    shutil.make_archive(f'{file_path}/{Analyses_Name}RESULTS', 'zip', f'{file_path}/Output_{hashcODE}')
     response = Response()
     @response.call_on_close
     def delete_archive():
         os.remove(f'{file_path}/{Analyses_Name}RESULTS.zip')
-    return send_file(f'{file_path}/{Analyses_Name}RESULTS.zip', as_attachment=True)
+    return send_file(f'{file_path}/{Analyses_Name}RESULTS.zip', as_attachment=True, mimetype= mime.from_file(f'{file_path}/{Analyses_Name}RESULTS.zip'))
 
 @app.route('/GetVisualizatedResults', methods=['POST'])
 def get_visual_results():
-    workflow = request.form['Workflow']
+    hashcODE = request.form['ID']
+    User = request.form['User_id']
+    Output_File = db.session.query(Output_Files).filter(Output_Files.parent_User_id==User).filter(Output_Files.hashcode_output==hashcODE)
+    workflow = Output_File.Rules_runned
     if 'all' in workflow:
-        return send_file() ##Se correu o workflow todo enviar o ficheiro de Results.ZIP
+        return send_file() ##Se correu o workflow todo enviar o ficheiro de Results.ZIP, meter a diretoria do ficheiro produzido pelo MOSCA
     else:
         Get_my_Files(workflow) #funçao que vamos criar para construir o zip file de resultados visiveis no MOSGUITO
         response = Response()
@@ -347,6 +352,18 @@ def get_visual_results():
         def delete_archive():
             os.remove() ##Remove o archive criado na Get_my_Files
         return send_file() ##send_file provavelmente direto para o MOSGUITO. ou senao so o download faz isso
+
+@app.route('/all_outputs', methods=['POST'])
+def get_outputs():
+    User = request.form['User_id']
+    Files = db.session.query(Output_Files).filter(Output_Files.parent_User_id==User)
+    if len(Files) == 0:
+        return('No output Files')
+    Response_data = []
+    for i in Files:
+        Response_data.append({'Analyses_name': i.Analyses_name, 'data': i.data , 'id': i.hashcode_output})
+    return({'my_info':Response_data})
+
 
 
 if __name__ == '__main__':
