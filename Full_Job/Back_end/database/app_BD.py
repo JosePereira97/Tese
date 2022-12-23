@@ -3,7 +3,7 @@ from multiprocessing import connection
 from subprocess import IDLE_PRIORITY_CLASS
 from tkinter.tix import Tree
 from typing import Type
-from flask import Flask, request, send_file, Response, make_response, jsonify
+from flask import Flask, request, send_file, Response, make_response, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from flask_cors import CORS
@@ -21,11 +21,15 @@ from MY_zip_results import Get_my_Files
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 import magic
+import base64
+from io import BytesIO
+import base64
 mime = magic.Magic(mime=True)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = "\xfd{H\xe5<\x95\xf9\xe3\x96.5\xd1\x01O<!\xd5\xa2\xa0\x9fR\xa1\xa8"
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:password@localhost/Teses'
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = -1
 db = SQLAlchemy(app)
 CORS(app, origins='*', supports_credentials=True)
 User_id_seq = db.Sequence('The_seq')
@@ -341,23 +345,30 @@ def download_my_results():
 def get_visual_results():
     hashcODE = request.form['ID']
     User = request.form['User_id']
-    Output_File = db.session.query(Output_Files).filter(Output_Files.parent_User_id==User).filter(Output_Files.hashcode_output==hashcODE)
+    Output_File = db.session.query(Output_Files).filter(Output_Files.parent_User_id==User).filter(Output_Files.hashcode_output==hashcODE).first()
     workflow = Output_File.Rules_runned
     if 'all' in workflow:
-        return send_file() ##Se correu o workflow todo enviar o ficheiro de Results.ZIP, meter a diretoria do ficheiro produzido pelo MOSCA
+        with open(f'{file_path}/MOSGUITO.zip', "rb") as fh:
+            buf = BytesIO(fh.read())
+        return buf
+        return send_file(f'{file_path}/MOSGUITO.zip', as_attachment=True, mimetype= mime.from_file(f'{file_path}/MOSGUITO.zip'))
     else:
         Get_my_Files(workflow) #funçao que vamos criar para construir o zip file de resultados visiveis no MOSGUITO
         response = Response()
         @response.call_on_close
         def delete_archive():
             os.remove() ##Remove o archive criado na Get_my_Files
-        return send_file() ##send_file provavelmente direto para o MOSGUITO. ou senao so o download faz isso
+        with open(f'{file_path}/MOSGUITO.zip', "rb") as fh2:
+            buf2 = BytesIO(fh2.read())
+        return buf2
+        return send_file(f'{file_path}/MOSGUITO.zip', as_attachment=True, mimetype= mime.from_file(f'{file_path}/MOSGUITO.zip')) ##send_file provavelmente direto para o MOSGUITO. ou senao so o download faz isso
 
 @app.route('/all_outputs', methods=['POST'])
 def get_outputs():
     User = request.form['User_id']
     Files = db.session.query(Output_Files).filter(Output_Files.parent_User_id==User)
-    if len(Files) == 0:
+    count = db.session.query(Output_Files).filter(Output_Files.parent_User_id==User).count()
+    if count == 0:
         return('No output Files')
     Response_data = []
     for i in Files:

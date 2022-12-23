@@ -20,9 +20,6 @@ export const LoadResults = ({ outputsFiles, setOutputsFiles, onConfigOverwrite, 
   const GetResults = async () => {
     const results = await axios.get(`${baseUrl}/get_all_user_files`)
     const {names} = results.data
-    console.log(results)
-    console.log(results.data)
-    console.log(names)
     setMy_analyses(names)
   }
 

@@ -31,12 +31,13 @@ import './../App.css'
 import {DashboardLayout} from "../components/Layout";
 import Accordion from "../components/Accordion";
 
-const Main = ({ configData, onConfigChange, onConfigOverwrite, hasMt, toggleHasMt, hasMp, toggleHasMp }) => {
+const Main = ({ configData, onConfigChange, onConfigOverwrite, hasMt, toggleHasMt, hasMp, toggleHasMp, experiments }) => {
 
   const camelToSnakeCase = str => str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
 
   const downloadJson = (ev) => {
     ev.preventDefault()
+    configData['experiments'] = experiments
     if (configData['doAssembly']) {onConfigChange('errorModel', 'complete')}
     const snake_case_values = {}
     Object.keys(configData).map((key) => snake_case_values[camelToSnakeCase(key)] = configData[key])
@@ -435,7 +436,7 @@ const Header = () => {
   )
 }
 
-function Config({ configData, onConfigChange, onConfigOverwrite, hasMt, toggleHasMt, hasMp, toggleHasMp }) {
+function Config({ configData, onConfigChange, onConfigOverwrite, hasMt, toggleHasMt, hasMp, toggleHasMp, experiments }) {
   return (
     <DashboardLayout>
       <div className='App'>
@@ -448,6 +449,7 @@ function Config({ configData, onConfigChange, onConfigOverwrite, hasMt, toggleHa
           toggleHasMt={toggleHasMt}
           hasMp={hasMp}
           toggleHasMp={toggleHasMp}
+          experiments = {experiments}
         />
       </div>
     </DashboardLayout>

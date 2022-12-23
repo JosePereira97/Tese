@@ -48,7 +48,8 @@ def delete_inputs():
 
 @app.route('/Get_my_inputs/Download_Files', methods=['POST'])
 def download_inputs():
-    data = request.form
+    data = request.form.to_dict()
+    print(data)
     data['User_id']= g.cookie['email']
     resposta = requests.post('http://localhost:5000//Download_Files', data = data)
     return resposta.content
@@ -85,9 +86,9 @@ def get_files():
     return resposta.content
 
 
-@app.route('/Get_my_analyses') ##falta construir funçoes para ir buscar os resultados
+@app.route('/Get_my_analyses',methods=['POST']) ##falta construir funçoes para ir buscar os resultados
 def my_analyses():
-    resposta = requests.get('http://localhost:5000/all_outputs', data={'User_id':g.cookie['email']})
+    resposta = requests.post('http://localhost:5000/all_outputs', data={'User_id':g.cookie['email']})
     if resposta.content == 'No output Files':
         return []
     else:
@@ -100,11 +101,12 @@ def my_outputs():
     resposta = requests.post('http://localhost:5000/downloadResults', data=data)
     pass
 
-@app.route('/Get_my_analyses/Get_Diferent_Outputs/results')
+@app.route('/Get_my_analyses/Get_Diferent_Outputs/results', methods=['POST'])
 def my_results():
     data = request.form.to_dict()
     data['User_id']= g.cookie['email']
-    resposta = requests.get('http://localhost:5000/GetVisualizatedResults', data=data)
+    resposta = requests.post('http://localhost:5000/GetVisualizatedResults', data=data)
+    print(type(resposta.content))
     return resposta.content
 
 
